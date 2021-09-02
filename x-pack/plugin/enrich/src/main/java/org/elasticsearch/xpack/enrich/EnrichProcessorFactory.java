@@ -6,7 +6,7 @@
  */
 package org.elasticsearch.xpack.enrich;
 
-import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.Client;
@@ -27,6 +27,7 @@ import org.elasticsearch.xpack.enrich.action.EnrichCoordinatorProxyAction;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -129,15 +130,21 @@ final class EnrichProcessorFactory implements Processor.Factory, Consumer<Cluste
     ) {
         Client originClient = new OriginSettingClient(client, ENRICH_ORIGIN);
         return (req, handler) -> {
-            // intentionally non-locking for simplicity...it's OK if we re-put the same key/value in the cache during a race condition.
-            SearchResponse response = enrichCache.get(req);
-            if (response != null) {
+            try {
+                SearchResponse response = enrichCache.computeIfAbsent(req, request -> {
+                    ActionFuture<SearchResponse> result = originClient.execute(EnrichCoordinatorProxyAction.INSTANCE, request);
+                    try {
+                        return result.get();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Search was interrupted", e);
+                    } catch (ExecutionException e) {
+                        throw new RuntimeException("Executing search failed", e);
+                    }
+                });
                 handler.accept(response, null);
-            } else {
-                originClient.execute(EnrichCoordinatorProxyAction.INSTANCE, req, ActionListener.wrap(resp -> {
-                    enrichCache.put(req, resp);
-                    handler.accept(resp, null);
-                }, e -> { handler.accept(null, e); }));
+            } catch (ExecutionException e) {
+                handler.accept(null, e);
             }
         };
     }

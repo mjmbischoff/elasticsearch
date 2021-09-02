@@ -16,6 +16,8 @@ import org.elasticsearch.common.cache.CacheBuilder;
 import org.elasticsearch.xpack.core.enrich.action.EnrichStatsAction;
 
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Function;
 
 /**
  * A simple cache for enrich that uses {@link Cache}. There is one instance of this cache and
@@ -56,6 +58,14 @@ public final class EnrichCache {
         CacheKey cacheKey = new CacheKey(enrichIndex, searchRequest);
 
         cache.put(cacheKey, searchResponse);
+    }
+
+    SearchResponse computeIfAbsent(SearchRequest searchRequest, Function<SearchRequest, SearchResponse> computeFunction)
+        throws ExecutionException {
+        String enrichIndex = getEnrichIndexKey(searchRequest);
+        CacheKey cacheKey = new CacheKey(enrichIndex, searchRequest);
+
+        return cache.computeIfAbsent(cacheKey, key -> computeFunction.apply(key.searchRequest));
     }
 
     void setMetadata(Metadata metadata) {
