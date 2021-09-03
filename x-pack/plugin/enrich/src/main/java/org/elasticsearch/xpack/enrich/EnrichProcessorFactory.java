@@ -6,7 +6,7 @@
  */
 package org.elasticsearch.xpack.enrich;
 
-import org.elasticsearch.action.ActionFuture;
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.Client;
@@ -27,6 +27,7 @@ import org.elasticsearch.xpack.enrich.action.EnrichCoordinatorProxyAction;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -131,18 +132,27 @@ final class EnrichProcessorFactory implements Processor.Factory, Consumer<Cluste
         Client originClient = new OriginSettingClient(client, ENRICH_ORIGIN);
         return (req, handler) -> {
             try {
-                SearchResponse response = enrichCache.computeIfAbsent(req, request -> {
-                    ActionFuture<SearchResponse> result = originClient.execute(EnrichCoordinatorProxyAction.INSTANCE, request);
-                    try {
-                        return result.get();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw new RuntimeException("Search was interrupted", e);
-                    } catch (ExecutionException e) {
-                        throw new RuntimeException("Executing search failed", e);
-                    }
+                CompletableFuture<SearchResponse> cacheEntry = enrichCache.computeIfAbsent(req, request -> {
+                    CompletableFuture completableFuture = new CompletableFuture();
+                    originClient.execute(
+                        EnrichCoordinatorProxyAction.INSTANCE,
+                        request,
+                        ActionListener.wrap(resp -> completableFuture.complete(resp), e -> completableFuture.completeExceptionally(e))
+                    );
+                    return completableFuture;
                 });
-                handler.accept(response, null);
+                cacheEntry.whenComplete((response, throwable) -> {
+                    Exception exception = null;
+                    if (throwable != null) {
+                        enrichCache.invalidate(req);
+                        if (throwable instanceof Exception) {
+                            exception = (Exception) throwable;
+                        } else {
+                            exception = new Exception("Unexpected error", throwable);
+                        }
+                    }
+                    handler.accept(response, exception);
+                });
             } catch (ExecutionException e) {
                 handler.accept(null, e);
             }

@@ -26,6 +26,7 @@ import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.enrich.EnrichPolicy;
 
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
@@ -89,9 +90,9 @@ public class EnrichCacheTests extends ESTestCase {
 
         var enrichCache = new EnrichCache(3);
         enrichCache.setMetadata(metadata);
-        enrichCache.put(searchRequest1, searchResponse);
-        enrichCache.put(searchRequest2, searchResponse);
-        enrichCache.put(searchRequest3, searchResponse);
+        enrichCache.put(searchRequest1, CompletableFuture.completedFuture(searchResponse));
+        enrichCache.put(searchRequest2, CompletableFuture.completedFuture(searchResponse));
+        enrichCache.put(searchRequest3, CompletableFuture.completedFuture(searchResponse));
         var cacheStats = enrichCache.getStats("_id");
         assertThat(cacheStats.getCount(), equalTo(3L));
         assertThat(cacheStats.getHits(), equalTo(0L));
@@ -108,7 +109,7 @@ public class EnrichCacheTests extends ESTestCase {
         assertThat(cacheStats.getMisses(), equalTo(1L));
         assertThat(cacheStats.getEvictions(), equalTo(0L));
 
-        enrichCache.put(searchRequest4, searchResponse);
+        enrichCache.put(searchRequest4, CompletableFuture.completedFuture(searchResponse));
         cacheStats = enrichCache.getStats("_id");
         assertThat(cacheStats.getCount(), equalTo(3L));
         assertThat(cacheStats.getHits(), equalTo(3L));
@@ -141,9 +142,9 @@ public class EnrichCacheTests extends ESTestCase {
         assertThat(enrichCache.get(searchRequest4), nullValue());
 
         // Add new entries using new enrich index name as key
-        enrichCache.put(searchRequest1, searchResponse);
-        enrichCache.put(searchRequest2, searchResponse);
-        enrichCache.put(searchRequest3, searchResponse);
+        enrichCache.put(searchRequest1, CompletableFuture.completedFuture(searchResponse));
+        enrichCache.put(searchRequest2, CompletableFuture.completedFuture(searchResponse));
+        enrichCache.put(searchRequest3, CompletableFuture.completedFuture(searchResponse));
 
         // Entries can now be served:
         assertThat(enrichCache.get(searchRequest1), notNullValue());
