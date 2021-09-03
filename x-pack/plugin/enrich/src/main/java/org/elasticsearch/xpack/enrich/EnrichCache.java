@@ -92,11 +92,11 @@ public final class EnrichCache {
         return ia.getIndices().get(0).getIndex().getName();
     }
 
-    public void invalidate(SearchRequest searchRequest) {
+    public void invalidate(SearchRequest searchRequest, CompletableFuture<SearchResponse> value) {
         String enrichIndex = getEnrichIndexKey(searchRequest);
         CacheKey cacheKey = new CacheKey(enrichIndex, searchRequest);
 
-        cache.invalidate(cacheKey);
+        cache.invalidate(cacheKey, value);
     }
 
     private static class CacheKey {

@@ -144,7 +144,7 @@ final class EnrichProcessorFactory implements Processor.Factory, Consumer<Cluste
                 cacheEntry.whenComplete((response, throwable) -> {
                     Exception exception = null;
                     if (throwable != null) {
-                        enrichCache.invalidate(req);
+                        enrichCache.invalidate(req, cacheEntry);
                         if (throwable instanceof Exception) {
                             exception = (Exception) throwable;
                         } else {
